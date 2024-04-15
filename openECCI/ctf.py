@@ -282,7 +282,7 @@ def _get_phases_from_header(
 
     Parameters
     ----------
-    header
+    Header
         List with header lines as individual elements.
 
     Returns
