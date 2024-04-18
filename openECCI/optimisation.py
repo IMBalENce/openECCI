@@ -19,12 +19,16 @@ from openECCI.util import normalize, rotate_image_around_point
 from openECCI import io, rkp
 import numpy as np
 from orix.quaternion import Rotation
+from diffsims.crystallography import ReciprocalLatticeVector
 from scipy.optimize import minimize
 from scipy.ndimage import gaussian_filter
 import matplotlib.pyplot as plt
 import cv2
 from tqdm import tqdm
 import os
+import kikuchipy as kp
+import math
+import matplotlib.patches as patches
 
 
 def modal_assurance_criterion(image1: np.ndarray, image2: np.ndarray) -> float:
@@ -579,6 +583,7 @@ class ipf_image_correlation:
         self.xmap = xmap
         self.sem_shape = sem_shape
         self.sem_norm = sem_norm
+        self.reference_image_path = reference_image_path
         print(xmap)
 
     def get_ipf_map(self, phase_name: str, plot: bool = True):
@@ -787,10 +792,29 @@ class ipf_image_correlation:
             print(f"Euler angles at the image point: {[Eu1, Eu2, Eu3]}")
             return [Eu1, Eu2, Eu3]
 
+    def get_phase_name(self, sem_coord: list):
+        """
+        Get the phase name from the SEM coordinates.
+        """
+        [original_x, original_y] = self.get_coord_before_tranformation(
+            [sem_coord[0], sem_coord[1]]
+        )
+
+        if (original_x == -1) or (original_y == -1):
+            Warning(f"Point is outside the EBSD map. Please confirm the input images.")
+            return -1
+
+        else:
+            phase_name = self.xmap[int(original_y), int(original_x)].phases_in_data[:]
+            print(f"Phase name at the image point: {phase_name}")
+            return phase_name
+
     def interactive_blended_xmap(self, initial_coord: list):
         """
         Display the blended image and allow the user to click on the image to get the Euler angles.
         """
+        self.coord_results = []
+
         [centre_x, centre_y] = initial_coord
 
         fig, ax3 = plt.subplots()
@@ -806,6 +830,7 @@ class ipf_image_correlation:
         sem_coords = [[centre_x, centre_y]]
         ipf_coords = [[original_x, original_y]]
         euler3 = [self.get_euler_from_sem_coord([centre_x, centre_y])]
+        phase_name = [self.get_phase_name([centre_x, centre_y])]
 
         def onclick(event):
             if event.dblclick:
@@ -820,6 +845,7 @@ class ipf_image_correlation:
 
                 sem_coords.append([x, y])
                 ipf_coords.append([original_x, original_y])
+                phase_name.append(self.get_phase_name([x, y]))
 
                 [Eu1, Eu2, Eu3] = self.get_euler_from_sem_coord([x, y])
 
@@ -837,7 +863,7 @@ class ipf_image_correlation:
                 plt.draw()
                 plt.axis("off")
                 # print(len(marker))
-                return sem_coords, ipf_coords, euler3
+                return sem_coords, ipf_coords, euler3, phase_name
 
         # Connect the mouse click event to the function
         cid = fig.canvas.mpl_connect("button_press_event", onclick)
@@ -847,4 +873,237 @@ class ipf_image_correlation:
         plt.draw()
         plt.axis("off")
 
-        return sem_coords, ipf_coords, euler3
+        self.coord_results = [sem_coords, ipf_coords, euler3, phase_name]
+
+        return sem_coords, ipf_coords, euler3, phase_name
+
+    def interactive_rkp(
+        self,
+        ref_ECP_path,
+        RKP_masterpattern,
+        corr_angles,
+        cam_length: float = 4,
+        stage_mode: str = "rot-tilt",
+    ):
+        """
+        Return the required SEM stage rotation and tilt so as to align the clicked direction in angular space with electron beam
+        direction.
+
+        Parameters
+        ----------
+        RKP_masterpattern
+
+        xtal_rotation
+
+        ref_ECP
+
+        corr_angles
+
+        st_rot_angle
+
+        st_tilt_angle
+
+        stage_mode
+
+        Returns
+        -------
+        coords
+            A list of all clicked coordinates. The last two elements are the [x,y] coordinate for the
+            last clicked point.
+        """
+        # st_rot = Rotation.from_axes_angles([0, 0, 1], -st_rot_angle, degrees=True)
+        # st_tilt = Rotation.from_axes_angles([0, 1, 0], -st_tilt_angle, degrees=True)
+        sem_coord = self.coord_results[0][-1]
+        euler3 = self.coord_results[2][-1]
+        phase = self.coord_results[3][-1]
+
+        # this is required for oxford data, better be converted at an earlier stage to avoid manual conversion.
+        fe_xtal_rotation = Rotation.from_euler(
+            np.deg2rad(euler3)
+        ) * Rotation.from_axes_angles([0, 0, 1], -np.pi / 2)
+
+        fig, axes = plt.subplots(2, 2, figsize=[14, 10])
+
+        # Plot the SEM image with the clicked point
+        axes[0, 0].imshow(self.ipf_warp_blended)
+        axes[0, 0].plot(sem_coord[0], sem_coord[1], "r+", markersize=14)
+        axes[0, 0].set_title("Overview SEM image with IPF Overlay", loc="center")
+
+        # Plot the RKP overview with indexing
+        axes[0, 1].cla()
+        ref = ReciprocalLatticeVector(
+            phase=phase, hkl=[[1, 1, 1], [2, 0, 0], [2, 2, 0], [3, 1, 1]]
+        )
+        ref = ref.symmetrise().unique()
+        hkl_sets = ref.get_hkl_sets()
+        hkl_sets
+        simulator = kp.simulations.KikuchiPatternSimulator(ref)
+
+        sim_RKP_lowMag = rkp.get_sim_rkp(
+            RKP_masterpattern,
+            xtal_rotation=fe_xtal_rotation,
+            st_rot_angle=0,
+            st_tilt_angle=0,
+            corr_angles=corr_angles,
+            ref_ECP=ref_ECP_path,
+            cam_length=0.6,
+            RKP_shape=[1024, 1024],
+        )
+        sim_RKP_lowMag_pattern = np.squeeze(sim_RKP_lowMag.data)
+        sim = simulator.on_detector(
+            sim_RKP_lowMag.detector, sim_RKP_lowMag.xmap.rotations
+        )
+        axes[0, 1].imshow(sim_RKP_lowMag_pattern, cmap="gray")
+        axes[0, 1].set_title("RKP Overview with indexing", loc="center")
+        axes[0, 1].axis("off")
+
+        lines, zone_axes, zone_axes_labels = sim.as_collections(
+            zone_axes=True,
+            zone_axes_labels=True,
+            zone_axes_labels_kwargs=dict(fontsize=12),
+        )
+        axes[0, 1].add_collection(lines)
+        axes[0, 1].add_collection(zone_axes)
+        for label in zone_axes_labels:
+            axes[0, 1].add_artist(label)
+
+        rect = patches.Rectangle(
+            (512 - (307 // 2), 512 - (307 // 2)),
+            307,
+            307,
+            linewidth=2,
+            edgecolor="royalblue",
+            facecolor="none",
+        )
+        axes[0, 1].add_patch(rect)
+
+        # Plot a second RKP with smaller angular range to show more detailed kikuchi band close to projection centre
+        axes[1, 1].cla()
+        sim_RKP_hiMag = rkp.get_sim_rkp(
+            RKP_masterpattern,
+            xtal_rotation=fe_xtal_rotation,
+            st_rot_angle=0,
+            st_tilt_angle=0,
+            corr_angles=corr_angles,
+            ref_ECP=ref_ECP_path,
+            cam_length=2,
+            RKP_shape=[1024, 1024],
+        )
+        sim_RKP_hiMag_pattern = np.squeeze(sim_RKP_hiMag.data)
+        ecp_dim = list(sim_RKP_hiMag_pattern.shape)
+        # get the BKP detector physcial dimensions
+        [PCx_rkp, PCy_rkp, PCz_rkp] = sim_RKP_hiMag.detector.pc[0]
+        [Ny, Nx] = sim_RKP_hiMag.detector.shape
+        px_size_rkp = sim_RKP_hiMag.detector.px_size
+        binning_rkp = sim_RKP_hiMag.detector.binning
+
+        axes[1, 1].imshow(sim_RKP_hiMag_pattern, cmap="gray")
+        # plot the centre marker for rkp prjection centre
+        axes[1, 1].plot(
+            PCx_rkp * Nx, PCy_rkp * Ny, "+", c="red", markersize=15, markeredgewidth=3
+        )
+
+        axes[1, 1].axis("off")
+        axes[1, 1].set_title(
+            "Click on RKP to find recommended stage movements", loc="center"
+        )
+        # ax2.set_title(f"Eular angle ({fe_euler_rotation.to_euler(degrees=True)}), required st rot {st_rot_target}, required st tilt {st_tilt_target}\n", fontsize=10)
+        coords = []
+
+        axes[1, 0].axis("off")
+
+        def on_click2(event):
+            if event.dblclick:
+                # print(event.xdata, event.ydata)
+                coords.append(event.xdata)
+                coords.append(event.ydata)
+
+                # plt.clf()
+                axes[1, 0].cla()
+                axes[1, 1].cla()
+
+                axes[1, 1].imshow(sim_RKP_hiMag_pattern, cmap="gray")
+                try:
+                    x_pos = coords[-2]
+                    y_pos = coords[-1]
+                except:
+                    x_pos = 0
+                    y_pos = 0
+                axes[1, 1].plot(
+                    x_pos, y_pos, "+", c="yellow", markersize=15, markeredgewidth=3
+                )
+                axes[1, 1].plot(
+                    PCx_rkp * Nx,
+                    PCy_rkp * Ny,
+                    "+",
+                    c="red",
+                    markersize=15,
+                    markeredgewidth=3,
+                )
+                axes[1, 1].set_title(
+                    "Click on RKP to find recommended stage movements", loc="center"
+                )
+                axes[1, 1].axis("off")
+
+                # Calculated the phycial distances on the detector from selected pixel to the projection centre,
+                # calculated in um (micrometer)
+                [coord_x, coord_y] = [x_pos, y_pos]
+                distance_x = (coord_x - PCx_rkp * Nx) * px_size_rkp * binning_rkp
+                distance_y = (PCy_rkp * Ny - coord_y) * px_size_rkp * binning_rkp
+                distance_l = PCz_rkp * Ny * px_size_rkp * binning_rkp
+
+                if stage_mode == "rot-tilt":
+                    # if the native SEM rotation tilt stage is used, calcuated the azimuthal and polar angle
+                    # of the selected pixel in the detector frame
+                    azi_rkp = np.arctan2(distance_x, distance_y)
+                    polar_rkp = math.atan(
+                        math.sqrt(distance_x**2 + distance_y**2) / distance_l
+                    )
+                    text = f"""
+                    Calculation results:
+                    
+                    Pixel position: {int(x_pos)}, {int(y_pos)}
+                    Virtual RKP detector pixel size: 10um
+                    Virtual RKP detector camera length: {round(distance_l/1000,2)}mm
+                    RKP resolution: [1024,1024]
+                    Estimated SEM stage coordinates:
+                    
+                    Physical distance on RKP detector:
+                    x {round(distance_x,2)}um, y {round(distance_y,2)}um
+                    
+                    Stage Rot {round(math.degrees(azi_rkp),2)}\N{DEGREE SIGN}, 
+                    Stage tilt {round(math.degrees(polar_rkp),2)}\N{DEGREE SIGN}
+                    """
+                elif stage_mode == "double-tilt":
+                    theta_x_rkp = math.atan(distance_x / distance_l)
+                    theta_y_rkp = math.atan(distance_y / distance_l)
+                    test = f"""
+                    Calculation results:
+                    
+                    Pixel position: {int(x_pos)}, {int(y_pos)}
+                    Virtual RKP detector pixel size: 10um
+                    Virtual RKP detector camera length: {round(distance_l/1000, 2)}mm
+                    RKP resolution: [1024,1024]
+                    Estimated SEM stage coordinates:
+                    
+                    Physical distance on RKP detector:
+                    x {round(distance_x,2)}um, y {round(distance_y,2)}um
+                    
+                    Tilt around Xs: {round(math.degrees(theta_x_rkp),2)}\N{DEGREE SIGN}, 
+                    Tilt around Ys: {round(math.degrees(theta_y_rkp),2)}\N{DEGREE SIGN}
+                    """
+
+                axes[1, 0].axis("off")
+                text_kwargs = dict(fontsize=14, ha="left", va="top", color="black")
+                axes[1, 0].text(-0.1, 0.8, text, **text_kwargs)
+                plt.draw()
+
+        fig.canvas.mpl_connect("button_press_event", on_click2)
+        plt.show()
+        plt.draw()
+        plt.axis("off")
+
+        plt.tight_layout()
+        fig.canvas.manager.window.move(0, 0)
+
+        return coords  # coordintes in x, y format
