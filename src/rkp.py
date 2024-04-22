@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
-from openECCI.io import get_sem_metadata
+from src.io import get_sem_metadata
 import numpy as np
 from diffsims.crystallography import ReciprocalLatticeVector
 from orix import plot, crystal_map

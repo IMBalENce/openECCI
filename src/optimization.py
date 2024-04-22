@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
-from openECCI.util import normalize, rotate_image_around_point
-from openECCI import io, rkp
+from src.util import normalize, rotate_image_around_point
+from src import io, rkp
 import numpy as np
 from orix.quaternion import Rotation
 from diffsims.crystallography import ReciprocalLatticeVector

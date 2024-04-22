@@ -23,7 +23,7 @@ import h5py as h5
 import xml.etree.ElementTree as ET
 import pathlib
 from orix import plot, crystal_map
-from openECCI.ctf import file_reader as ctf_reader
+from src.ctf import file_reader as ctf_reader
 from orix.io import load as ang_reader
 from orix.quaternion import Rotation
 import pickle
