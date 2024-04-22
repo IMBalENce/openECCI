@@ -18,7 +18,7 @@
 __all__ = [
     "util",
     "convergence_angle",
-    "optimisation",
+    "optimization",
     "ctf",
     "rkp",
     "io",
