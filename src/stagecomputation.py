@@ -54,10 +54,14 @@ def get_relative_stage_pos(reference_image, current_image):
     st_rot_angle = -(cur_metadata["stage_rot_angle"] - ref_metadata["stage_rot_angle"])
     st_tilt_angle = cur_metadata["stage_tilt_angle"] - ref_metadata["stage_tilt_angle"]
 
+    diff_x = cur_metadata["stage_x"] - ref_metadata["stage_x"]
+    diff_y = cur_metadata["stage_y"] - ref_metadata["stage_y"]
+    diff_z = cur_metadata["stage_z"] - ref_metadata["stage_z"]
+
     if st_rot_angle > 180:
         st_rot_angle = st_rot_angle - 360
 
-    return st_rot_angle, st_tilt_angle
+    return st_rot_angle, st_tilt_angle, diff_x, diff_y, diff_z
 
 
 def _stage_in_range(image_path, stage_x, stage_y):

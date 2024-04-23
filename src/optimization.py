@@ -342,7 +342,7 @@ class convergence_angle_measurement:
 
         if plot:
             plt.figure(figsize=(10, 5))
-            plt.plot(x, normalized_profile, label="Profile", color="royalblue")
+            plt.plot(x, normalized_profile, label="Edge profile", color="royalblue")
             plt.plot(x, normalize(gradient_1st), label="1st derivative", color="orange")
             plt.plot(x, normalize(gradient_2nd), label="2nd derivative", color="green")
             plt.xlabel("Distance (um)")
@@ -384,8 +384,8 @@ class convergence_angle_measurement:
         plot: bool = False,
     ):
         """
-        Get the edge profile from the aperture image from the centroid of the aperturn towards a given angle.
-        The zero degree angle is defined as the horizontal line from the centroid to the right. The positive angle
+        Get the edge profile from the aperture image from the centroid of the aperture towards a given angle.
+        A zero degree angle is defined as the horizontal line from the centroid to the right. The positive angle
         is in the counter-clockwise direction.
         """
         centroid = self.original_centroid
@@ -464,7 +464,7 @@ class convergence_angle_measurement:
             axes[0, 0].set_title("Defocused Aperture Image")
 
             axes[0, 1].plot(
-                x, normalized_profile_plot, label="Profile", color="royalblue"
+                x, normalized_profile_plot, label="Edge profile", color="royalblue"
             )
             axes[0, 1].plot(
                 x,
