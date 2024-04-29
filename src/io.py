@@ -78,19 +78,21 @@ def get_sem_metadata(filename: str) -> dict:
                 """
                 st_rot_angle = math.degrees(tif.fei_metadata["Stage"]["StageR"])
                 st_tilt_angle = math.degrees(tif.fei_metadata["Stage"]["StageT"])
-                # st_x = tif.fei_metadata['Stage']['StageX']
-                # st_y = tif.fei_metadata['Stage']['StageY']
-                st_z = tif.fei_metadata["Stage"]["StageZ"]
 
-                # get the true image position including the stage position and the beam shift
-                st_x = (
-                    tif.fei_metadata["Stage"]["StageX"]
-                    - tif.fei_metadata["Beam"]["BeamShiftX"]
-                )
-                st_y = (
-                    tif.fei_metadata["Stage"]["StageY"]
-                    - tif.fei_metadata["Beam"]["BeamShiftY"]
-                )
+                # These are the electron beam positions, not the stage position
+                st_x = tif.fei_metadata["EBeam"]["StageX"]
+                st_y = tif.fei_metadata["EBeam"]["StageY"]
+                st_z = tif.fei_metadata["EBeam"]["StageZ"]
+
+                # An alternative way to the electron bem positions = stage position - the beam shift
+                # st_x = (
+                #     tif.fei_metadata["Stage"]["StageX"]
+                #     - tif.fei_metadata["EBeam"]["BeamShiftX"]
+                # )
+                # st_y = (
+                #     tif.fei_metadata["Stage"]["StageY"]
+                #     - tif.fei_metadata["EBeam"]["BeamShiftY"]
+                # )
 
                 pixel_width = tif.fei_metadata["EScan"]["PixelWidth"]
                 pixel_height = tif.fei_metadata["EScan"]["PixelHeight"]

@@ -16,7 +16,7 @@
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
 from src.util import normalize, rotate_image_around_point
-from src import io, rkp
+from src import io, rkp, stagecomputation
 import numpy as np
 from orix.quaternion import Rotation
 from diffsims.crystallography import ReciprocalLatticeVector
@@ -318,15 +318,18 @@ class convergence_angle_measurement:
         self,
         aperture_image: np.ndarray,
         centroid: list,
+        vertical_bin: int = 1,
         filter_sigma: float = 5,
         plot: bool = False,
     ):
         """
         Get the edge profile from  aperture image along the horizontal line from the centroid to the right
         """
-        profile = aperture_image[
-            int(centroid[1]), int(centroid[0]) : (int(centroid[0]) + self.profile_range)
+        profiles = aperture_image[
+            int(centroid[1]) : (int(centroid[1]) + vertical_bin),
+            int(centroid[0]) : (int(centroid[0]) + self.profile_range),
         ]
+        profile = profiles.mean(axis=0)
         normalized_profile = normalize(profile)
         gradient_1st = gaussian_filter(
             np.gradient(normalized_profile), sigma=filter_sigma
@@ -381,6 +384,7 @@ class convergence_angle_measurement:
         self,
         angle: float,
         filter_sigma: float = 5,
+        vertical_bin: int = 1,
         plot: bool = False,
     ):
         """
@@ -393,7 +397,7 @@ class convergence_angle_measurement:
             self.image, centroid, -angle
         )
         profile, gradient_1st, gradient_2nd = self._get_edge_profile(
-            rotated_img, new_centroid, filter_sigma, plot=plot
+            rotated_img, new_centroid, vertical_bin, filter_sigma, plot=plot
         )
 
         return profile, gradient_1st, gradient_2nd
@@ -421,6 +425,7 @@ class convergence_angle_measurement:
         self,
         angle_step: float,
         filter_sigma: float = 5,
+        vertical_bin: int = 1,
         plot: bool = True,
         save_results: bool = False,
     ):
@@ -431,7 +436,10 @@ class convergence_angle_measurement:
 
         for index, value in enumerate(tqdm(steps)):
             profile, gradient_1st, gradient_2nd = self.get_profile_from_angle(
-                angle=value, filter_sigma=filter_sigma, plot=False
+                angle=value,
+                filter_sigma=filter_sigma,
+                vertical_bin=vertical_bin,
+                plot=False,
             )
             conv_half_angle, probe_diameter = self._conv_angle_from_profile(
                 gradient_2nd
@@ -842,6 +850,12 @@ class ipf_image_correlation:
                 ax3.imshow(self.ipf_warp_blended)
 
                 [original_x, original_y] = self.get_coord_before_tranformation([x, y])
+                [stage_x, stage_y] = stagecomputation.pixel_pos_to_stage_coord(
+                    self.reference_image_path,
+                    pixel_x=x,
+                    pixel_y=y,
+                    stage_mode="absolute",
+                )
 
                 sem_coords.append([x, y])
                 ipf_coords.append([original_x, original_y])
@@ -856,7 +870,7 @@ class ipf_image_correlation:
                     )
                 else:
                     ax3.set_title(
-                        f"IPF coordinate: {original_x}, {original_y},\nEuler angles: {Eu1:.2f}, {Eu2:.2f}, {Eu3:.2f}"
+                        f"IPF coordinate: {original_x}, {original_y},\nEuler angles: {Eu1:.2f}, {Eu2:.2f}, {Eu3:.2f}\nStage position: x {stage_x*1e3:.5f}mm, y {stage_y*1e3:.5f}mm"
                     )
                 # print(f"Euler angles: {Eu1:.2f}, {Eu2:.2f}, {Eu3:.2f}")
                 euler3.append([Eu1, Eu2, Eu3])
@@ -1019,7 +1033,6 @@ class ipf_image_correlation:
                 coords.append(event.xdata)
                 coords.append(event.ydata)
 
-                # plt.clf()
                 axes[1, 0].cla()
                 axes[1, 1].cla()
 
@@ -1051,7 +1064,8 @@ class ipf_image_correlation:
                 [coord_x, coord_y] = [x_pos, y_pos]
                 distance_x = (coord_x - PCx_rkp * Nx) * px_size_rkp * binning_rkp
                 distance_y = (PCy_rkp * Ny - coord_y) * px_size_rkp * binning_rkp
-                distance_l = PCz_rkp * Ny * px_size_rkp * binning_rkp
+                # Calculate the physical distance between the ebeam interaction point and the detector in mm (milimeter)
+                distance_l = PCz_rkp * Ny * px_size_rkp * 1e-3 * binning_rkp
 
                 if stage_mode == "rot-tilt":
                     # if the native SEM rotation tilt stage is used, calcuated the azimuthal and polar angle
@@ -1065,14 +1079,14 @@ class ipf_image_correlation:
                     
                     Pixel position: {int(x_pos)}, {int(y_pos)}
                     Virtual RKP detector pixel size: 10um
-                    Virtual RKP detector camera length: {round(distance_l/1000,2)}mm
+                    Virtual RKP detector camera length: {distance_l:.3f}mm
                     RKP resolution: [1024,1024]
-                    Estimated SEM stage coordinates:
                     
                     Physical distance to PC on RKP detector:
-                    x {round(distance_x,2)}um, y {round(distance_y,2)}um
+                    x {distance_x:.2f}um, y {distance_y:.2f}um
                     
-                    Stage Rot {round(math.degrees(azi_rkp),2)}\N{DEGREE SIGN}, 
+                    To orient the selected pixel to the beam direction requires
+                    Stage Rot {round(math.degrees(azi_rkp),2)}\N{DEGREE SIGN}
                     Stage tilt {round(math.degrees(polar_rkp),2)}\N{DEGREE SIGN}
                     """
                 elif stage_mode == "double-tilt":
@@ -1083,14 +1097,14 @@ class ipf_image_correlation:
                     
                     Pixel position: {int(x_pos)}, {int(y_pos)}
                     Virtual RKP detector pixel size: 10um
-                    Virtual RKP detector camera length: {round(distance_l/1000, 2)}mm
+                    Virtual RKP detector camera length: {distance_l:.3f}mm
                     RKP resolution: [1024,1024]
-                    Estimated SEM stage coordinates:
                     
                     Physical distance to PC on RKP detector:
-                    x {round(distance_x,2)}um, y {round(distance_y,2)}um
+                    x {distance_x:.2f}um, y {distance_y:.2f}um
                     
-                    Tilt around Xs: {round(math.degrees(theta_x_rkp),2)}\N{DEGREE SIGN}, 
+                    To orient the selected pixel to the beam direction requires
+                    Tilt around Xs: {round(math.degrees(theta_x_rkp),2)}\N{DEGREE SIGN}
                     Tilt around Ys: {round(math.degrees(theta_y_rkp),2)}\N{DEGREE SIGN}
                     """
 

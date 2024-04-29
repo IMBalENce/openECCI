@@ -95,3 +95,25 @@ def _get_image_range(image_path):
     vfh = metadata["pixel_size"] * metadata["resolution"][1]
 
     return [centre_x, centre_y, hfw, vfh]
+
+
+def pixel_pos_to_stage_coord(image_path, pixel_x, pixel_y, stage_mode="absolute"):
+    """
+    Convert the pixel position in a low magnification SEM image to the absolute stage coordinate
+
+    Returns
+        [stage_x, stage_y]
+    """
+
+    pixel_size = io.get_sem_metadata(image_path)["pixel_size"]
+    sem_resolution = io.get_sem_metadata(image_path)["resolution"]
+    [centre_x, centre_y, hfw, vfh] = _get_image_range(image_path)
+
+    if stage_mode == "absolute":
+        stage_x = centre_x + (pixel_x - sem_resolution[0] // 2) * pixel_size
+        stage_y = centre_y - (pixel_y - sem_resolution[1] // 2) * pixel_size
+    elif stage_mode == "relative":
+        stage_x = (pixel_x - sem_resolution[0] // 2) * pixel_size
+        stage_y = (pixel_y - sem_resolution[1] // 2) * pixel_size
+
+    return [stage_x, stage_y]
