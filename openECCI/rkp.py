@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
-from src.io import get_sem_metadata
+from openECCI.io import get_sem_metadata
 import numpy as np
 from diffsims.crystallography import ReciprocalLatticeVector
 from orix import plot, crystal_map
@@ -34,7 +34,7 @@ def get_sim_rkp(
     st_tilt_angle: float,
     corr_angles: list,
     ref_ECP: str,
-    cam_length: float = 4,
+    PCz: float = 4,
     RKP_shape: list = None,
 ):
     """
@@ -60,8 +60,8 @@ def get_sim_rkp(
     ref_ECP
         Reference ECP pattern acquired from SEM for calibration. Image resolution without databar
         is used for generating RKP with an identical detector shape.
-    cam_length
-        cam_length is actually the pattern center PC\ :sub:`z` defined as the distance from RKP
+    PCz
+        PCz is the pattern center PC\ :sub:`z` defined as the distance from RKP
         virtual detector scintillator to the sample divided by the pattern height physical dimension.
     RKP_shape
         Shape of RKP pixel dimension in the form of list [x, y]
@@ -90,7 +90,7 @@ def get_sim_rkp(
         shape=(rkp_shape[1], rkp_shape[0]),
         tilt=-90,
         sample_tilt=0,
-        pc=[0.5, 0.5, cam_length],
+        pc=[0.5, 0.5, PCz],
         # pc=[0.5, 0.5, 8.5], # for camera length for Zeiss
         px_size=10,
         binning=1,
@@ -117,12 +117,13 @@ def interactive_xmap(
 ):
     """
     Interactive_xmap
-    requires pyqt to display the ipf map.
+
+    NOTE: requires pyqt interactive window to run this function.
 
     Parameters
     ----------
     xmap
-        Numpy 2d array of image 1.
+        Numpy 2d array of EBSD IPF map.
     phase_name
         The name of phase to display in the IPF map. This could be listed by printing the xmap
         object and return all included phase names

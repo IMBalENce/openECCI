@@ -22,8 +22,8 @@ import re
 import h5py as h5
 import xml.etree.ElementTree as ET
 import pathlib
-from orix import plot, crystal_map
-from src.ctf import file_reader as ctf_reader
+from orix import crystal_map
+from openECCI.ctf import file_reader as ctf_reader
 from orix.io import load as ang_reader
 from orix.quaternion import Rotation
 import pickle
@@ -418,31 +418,6 @@ def load_xmap(filename: str) -> crystal_map:
         raise IOError("The imported file format is not supported.")
 
     return xmap
-
-
-# def loadctf(file_string: str) -> Rotation:
-#     """Load ``.ctf`` files.
-
-#     Parameters
-#     ----------
-#     file_string
-#         Path to the ``.ctf`` file. This file is assumed to list the
-#         Euler angles in the Bunge convention in the columns 5, 6, and 7.
-#         The starting row for the data that contains Euler angles is relevant
-#         to the number of inlcuded phases.
-
-#     Returns
-#     -------
-#     rotation
-#         Rotations in the file.
-#     """
-#     with open(file_string, "r") as file:
-#         all_data = [line.strip() for line in file.readlines()]
-#         phase_num = int(all_data[12].split("\t")[1])
-
-#     data = np.loadtxt(file_string, skiprows=(14 + phase_num))[:, 5:8]
-#     euler = np.radians(data)
-#     return Rotation.from_euler(euler)
 
 
 def get_avg_orientation(filename: str) -> Rotation:

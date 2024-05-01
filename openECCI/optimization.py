@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
-from src.util import normalize, rotate_image_around_point
-from src import io, rkp, stagecomputation
+from openECCI.util import normalize, rotate_image_around_point
+from openECCI import io, rkp, stagecomputation
 import numpy as np
 from orix.quaternion import Rotation
 from diffsims.crystallography import ReciprocalLatticeVector
@@ -101,12 +101,12 @@ class orientation_calibration:
         self.reference_ECP_path = reference_ECP_path
         self.master_pattern = si_master_pattern
         self.Si_xtal = Si_xtal
-        self.cam_length = PCz
+        self.PCz = PCz
         self.initial_guess = {
             "tiltX_corr_angle": self.corr_angles[0],
             "tiltY_corr_angle": self.corr_angles[1],
             "tiltZ_corr_angle": self.corr_angles[2],
-            "PCz": self.cam_length,
+            "PCz": self.PCz,
         }
 
         print(
@@ -152,7 +152,7 @@ class orientation_calibration:
             st_tilt_angle=0,
             corr_angles=parameter_list[0:3],
             ref_ECP=self.reference_ECP_path,
-            cam_length=parameter_list[3],
+            PCz=parameter_list[3],
             RKP_shape=ecp_shape,
         )
 
@@ -191,7 +191,7 @@ class orientation_calibration:
             st_tilt_angle=0,
             corr_angles=parameter_list[0:3],
             ref_ECP=self.reference_ECP_path,
-            cam_length=parameter_list[3],
+            PCz=parameter_list[3],
             RKP_shape=ecp_shape,
         )
 
@@ -204,7 +204,7 @@ class orientation_calibration:
     def optimize_calibration(self, method="NDP"):
         """
         By using the Nelder-Mead method, the optimized parameters, i.e. [tiltX_corr_angle, tiltY_corr_angle, tiltZ_corr_angle, PCz],
-        can be retrieved by minimizing the deviation between experimental ECP and simulated RKP (minimize 1-NDP or 1-MAC).
+        can be retrieved by minimizing the deviation between experimental ECP and simulated RKP (by minimizing 1-NDP or 1-MAC).
 
         Parameters
         ----------
@@ -271,26 +271,44 @@ class orientation_calibration:
 class convergence_angle_measurement:
     def __init__(
         self,
-        aperture_image_path: str,
+        hole_image_path: str,
     ):
         """
-        A process to measure the electron beam convergence (semi) angle
+        A process to measure the electron beam convergence (semi) angle in a Scanning Electron Microscopy (SEM) using a defocused (overfocused) BSE
+        image of a hole on Pt. The convergence angle is estimated by analyzing the edge profile of the hole image at different angles.
+
+        Parameters
+        ----------
+        hole_image_path : str
+            The path of the hole image acquired from the SEM.
         """
-        self.img_metadata = io.get_sem_metadata(aperture_image_path)
+        self.img_metadata = io.get_sem_metadata(hole_image_path)
         img_resolution = self.img_metadata["resolution"]
 
-        img = cv2.imread(aperture_image_path, cv2.IMREAD_ANYDEPTH)
+        img = cv2.imread(hole_image_path, cv2.IMREAD_ANYDEPTH)
         img_gray = img[: img_resolution[1], : img_resolution[0]]
         self.image = img_gray
         self.img_resolution = img_resolution
-        self.data_dir, self.filename = os.path.split(aperture_image_path)
+        self.data_dir, self.filename = os.path.split(hole_image_path)
 
     def __repr__(self):
         return f"Convergence Angle Measurement Object: {self.Pt_aperture_image_path}"
 
     def find_centroid(self, threshold: float, plot: bool = True):
         """
-        find the centroid of the aperture image without any rotation.
+        Find the centroid pixel position of the hole in the BSE image. The threshold value is used to binarize the image.
+
+        Parameters
+        ----------
+        threshold : float
+            The threshold value used to binarize the image.
+        plot : bool
+            If True, the hole image with the centroid position will be displayed.
+
+        Returns
+        -------
+        centroid : list
+            The centroid pixel position of the hole in the BSE image.
         """
         ret, thresh = cv2.threshold(
             self.image, threshold, np.max(self.image), cv2.THRESH_BINARY_INV
@@ -316,20 +334,46 @@ class convergence_angle_measurement:
 
     def _get_edge_profile(
         self,
-        aperture_image: np.ndarray,
+        hole_image: np.ndarray,
         centroid: list,
         vertical_bin: int = 1,
         filter_sigma: float = 5,
         plot: bool = False,
     ):
         """
-        Get the edge profile from  aperture image along the horizontal line from the centroid to the right
+        Get the edge profile from the hole image along the horizontal line from the centroid towards the right.
+
+        Parameters
+        ----------
+        aperture_image : np.ndarray
+            The hole image.
+        centroid : list
+            The centroid pixel position of the hole in the BSE image.
+        vertical_bin : int
+            The vertical binning factor can be used to reduce the noise of edge profile. By defult (vertical_bin=1), the row of pixels from the centroid towards
+            the right will be added to the row of pixels below it. By increasing the vertical_bin, adding multiple rows of pixels will reduce the noise of the
+            edge profile.
+        filter_sigma : float
+            The sigma value used for the Gaussian filter to reduce noise in gradient calculation. Greater sigma value will smooth the profile more.
+        plot : bool
+            If True, the edge profile will be plotted.
+
+        Returns
+        -------
+        normalized_profile : np.ndarray
+            The normalized edge profile.
+        gradient_1st : np.ndarray
+            The 1st derivative of the edge profile.
+        gradient_2nd : np.ndarray
+            The 2nd derivative of the edge profile.
         """
-        profiles = aperture_image[
+        # TODO: Add conditions to confirm if the vertical binning is greater than 1
+
+        profiles = hole_image[
             int(centroid[1]) : (int(centroid[1]) + vertical_bin),
             int(centroid[0]) : (int(centroid[0]) + self.profile_range),
         ]
-        profile = profiles.mean(axis=0)
+        profile = profiles.sum(axis=0)
         normalized_profile = normalize(profile)
         gradient_1st = gaussian_filter(
             np.gradient(normalized_profile), sigma=filter_sigma
@@ -376,6 +420,17 @@ class convergence_angle_measurement:
     def _get_distance_to_edge(self, point_coord: list):
         """
         Get the distance from the centroid to the edge of the initial unrotated image in the four directions.
+
+        Parameters
+        ----------
+        point_coord : list
+            The pixel position of the point.
+
+        Returns
+        -------
+        distance_to_edge : list
+            The distance from the centroid to the edge of the initial unrotated image in the four directions, i.e.
+            [left, top, right, bottom]
         """
         [cX, cY] = point_coord
         return [cX, cY, self.img_resolution[0] - cX, self.img_resolution[1] - cY]
@@ -388,10 +443,36 @@ class convergence_angle_measurement:
         plot: bool = False,
     ):
         """
-        Get the edge profile from the aperture image from the centroid of the aperture towards a given angle.
-        A zero degree angle is defined as the horizontal line from the centroid to the right. The positive angle
-        is in the counter-clockwise direction.
+        Get the edge profile from the hole image from the centroid of the aperture towards a given angle. In calculating the edge profile, the image
+        is rotated around the centroid by the designated angle. the edge profile is then obtained from the rotated image along the horizontal line from
+        the centroid towards the right.
+
+        Parameters
+        ----------
+        angle : float
+            The angle of the profile orientation in degrees. A zero degree angle is defined as the horizontal line from the centroid towards the right.
+            The positive angle is in the counter-clockwise direction.
+        filter_sigma : float
+            The sigma value used for the Gaussian filter to reduce noise in gradient calculation. Greater sigma value will smooth the profile more.
+        vertical_bin : int
+            The vertical binning factor can be used to reduce the noise of edge profile. By defult (vertical_bin=1), the row of pixels from the centroid towards
+            the right will be added to the row of pixels below it. By increasing the vertical_bin, adding multiple rows of pixels will reduce the noise of the
+            edge profile.
+        plot : bool
+            If True, the edge profile will be plotted.
+
+        Returns
+        -------
+        profile : np.ndarray
+            The edge profile.
+        gradient_1st : np.ndarray
+            The 1st derivative of the edge profile.
+        gradient_2nd : np.ndarray
+            The 2nd derivative of the edge profile.
         """
+
+        # TODO: Add conditions to confirm if the vertical binning is greater than 1
+
         centroid = self.original_centroid
         rotated_img, new_centroid = rotate_image_around_point(
             self.image, centroid, -angle
@@ -407,6 +488,38 @@ class convergence_angle_measurement:
     ):
         """
         Compute the convergence angle from the 2nd derivative of the edge profile.
+        
+        The distance between the max and min positions of the 2nd derivative of the edge profile is approximately the diameter of the diverged probe disk.
+        By using trigonometry, the convergence (half) angle can be calculated.
+        
+        The distance between the electron beam focus point and disk diverged electron probe is the height offset.
+        >>> - Electron beam focus point
+               O  
+              /|\\
+             / | \\
+            /  |  \\
+           /   |   \\   
+          /    |    \\
+         /     |     \\
+        /______|______\\
+        - disk of diverged electron probe 
+        
+        
+        
+        Parameters
+        ----------
+        gradient_2nd : np.ndarray
+            The 2nd derivative of the edge profile.
+        height_offset : float
+            The height offset between the electron beam focus point and the disk of diverged electron probe. By default, the height offset is the difference 
+            between the stage z and working distance (WD) of the SEM.
+            
+        Returns
+        -------
+        conv_half_angle : float
+            The convergence half angle in mrad.
+        probe_diameter : float
+            The diameter of the diverged probe disk in meter.
         """
         if height_offset is None:
             height_offset = self.img_metadata["stage_z"] - self.img_metadata["WD"]
@@ -430,7 +543,22 @@ class convergence_angle_measurement:
         save_results: bool = False,
     ):
         """
-        Compute the gradient of the edge profile of the aperture image along different angles.
+        Compute the gradient of the edge profile of the aperture image along different angles at a desginated step.
+
+        Parameters
+        ----------
+        angle_step : float
+            The step of the angle in degrees.
+        filter_sigma : float
+            The sigma value used for the Gaussian filter to reduce noise in gradient calculation. Greater sigma value will smooth the profile more.
+        vertical_bin : int
+            The vertical binning factor can be used to reduce the noise of edge profile. By defult (vertical_bin=1), the row of pixels from the centroid towards
+            the right will be added to the row of pixels below it. By increasing the vertical_bin, adding multiple rows of pixels will reduce the noise of the
+            edge profile.
+        plot : bool
+            If True, the results will be plotted.
+        save_results : bool
+            If True, the results will be saved.
         """
         steps = np.arange(0, 359, angle_step)
 
@@ -458,6 +586,7 @@ class convergence_angle_measurement:
                 conv_half_angles = np.append(conv_half_angles, conv_half_angle)
                 probe_diameters = np.append(probe_diameters, probe_diameter)
 
+        # if plot is True, plot the results
         if plot:
             fig, axes = plt.subplots(2, 2, figsize=[14, 10])
 
@@ -470,6 +599,7 @@ class convergence_angle_measurement:
             axes[0, 0].imshow(self.image, cmap="gray")
             axes[0, 0].scatter(cX, cY, c="r")
             axes[0, 0].set_title("Defocused Aperture Image")
+            # axes[0, 0].set_axis_off()
 
             axes[0, 1].plot(
                 x, normalized_profile_plot, label="Edge profile", color="royalblue"
@@ -515,18 +645,23 @@ class convergence_angle_measurement:
             axes[1, 0].plot(
                 steps,
                 probe_diameters * 1e6,
-                "x",
+                "o",
                 color="b",
                 label="Diameter of diverged probe disk",
             )
-            axes[1, 0].set_ylim([5, 60])
-            # axes[1,0].set_title(f'Diameter of diverged probe disk vs. angle')
+
+            axes[1, 0].set_ylim(
+                [
+                    np.mean(probe_diameters) * 1e6 - 5,
+                    np.mean(probe_diameters) * 1e6 + 10,
+                ]
+            )
             axes[1, 0].set_xlabel("Angle of measurement (deg)")
-            axes[1, 0].set_ylabel("Diverged probe disk diameter (um)")
+            axes[1, 0].set_ylabel("Diverged probe disk diameter (um)", color="b")
             ax2 = axes[1, 0].twinx()
-            ax2.plot(steps, conv_half_angles, "o", color="r", label="Convergence angle")
-            ax2.set_ylabel("Convergence angle (mrad)")
-            ax2.set_ylim([0, 15])
+            ax2.plot(steps, conv_half_angles, "+", color="r", label="Convergence angle")
+            ax2.set_ylabel("Convergence angle (mrad)", color="r")
+            ax2.set_ylim([0, np.mean(conv_half_angles) + 5])
 
             # Add legend
             points1, label1 = axes[1, 0].get_legend_handles_labels()
@@ -563,22 +698,20 @@ class convergence_angle_measurement:
 
 
 class ipf_image_correlation:
-    """
-    Compute the image correlation between the reference and the warp image.
-    """
-
     def __init__(
         self,
         reference_image_path: str,
         ebsd_file_path: str,
     ):
         """
-        Compute the image correlation between the reference SEM image and the EBSD ipf map.
+        Correlate and align the IPF map from the EBSD data with the SEM image by registering common features to apply homographic transformation.
 
         Parameters
         ----------
-
-
+        reference_image_path : str
+            The path of the reference SEM image.
+        ebsd_file_path : str
+            The path of the EBSD data file.
         """
         xmap = io.load_xmap(ebsd_file_path)
 
@@ -597,6 +730,13 @@ class ipf_image_correlation:
     def get_ipf_map(self, phase_name: str, plot: bool = True):
         """
         Get the IPF map of a phase from the EBSD data.
+
+        Parameters
+        ----------
+        phase_name : str
+            The name of the phase.
+        plot : bool
+            If True, the EBSD IPF map will be displayed.
         """
         ipf_map = rkp.get_xmap_image(
             self.xmap, phase_name=phase_name, overlay="BC"
@@ -622,13 +762,17 @@ class ipf_image_correlation:
 
         Parameters
         ----------
-        alignment_points_ref
-
-        alignment_points_warp
+        alignment_points_ipf : np.ndarray
+            The alignment points from the EBSD IPF map.
+        alignment_points_ref : np.ndarray
+            The alignment points from the SEM image.
 
         Returns
         -------
-
+        warp_ipf : np.ndarray
+            The warped EBSD IPF map after homographic transformation.
+        inverse_transformation_matrix : np.ndarray
+            The inverse transformation matrix of applied homographic transformation.
         """
         # Convert the list of points to numpy array
 
@@ -643,6 +787,10 @@ class ipf_image_correlation:
         return warp_ipf, inverse_transformation_matrix
 
     def get_ipf_points(self):
+        """
+        Get the clicked points from EBSD IPF map for the correlation.
+        """
+
         # display the interactive EBSD IPF map to select correlation points
         # Create a function to handle mouse click events
         def onclick(event):
@@ -715,7 +863,19 @@ class ipf_image_correlation:
 
     def process(self, plot: bool = True):
         """
-        Compute the homography transformation matrix from the selected points and apply the transformation to the IPF map.
+        Compute the homography transformation matrix from the selected points and apply the transformation to the EBSD IPF map.
+
+        Parameters
+        ----------
+        plot : bool
+            If True, the blended image of SEM and EBSD IPF map will be displayed.
+
+        Returns
+        -------
+        ipf_warp_blended : np.ndarray
+            The warped EBSD IPF map after homographic transformation and blended with sem image.
+        inverse_transformation_matrix : np.ndarray
+            The inverse transformation matrix of applied homographic transformation.
         """
         warp_ipf, inverse_transformation_matrix = self._homography_transform(
             self.ipf_points, self.sem_points
@@ -743,6 +903,11 @@ class ipf_image_correlation:
     ):
         """
         Save the alignment points to a pickle file.
+
+        Parameters
+        ----------
+        save_path : str
+            The path to save the alignment points.
         """
         ipf_points = np.array(self.ipf_points, dtype=np.float32)
         sem_points = np.array(self.sem_points, dtype=np.float32)
@@ -754,13 +919,30 @@ class ipf_image_correlation:
     ):
         """
         Load the alignment points from a pickle file.
+
+        Parameters
+        ----------
+        load_path : str
+            The path to load the alignment points.
         """
         [self.ipf_points, self.sem_points] = io.load_prev_align_points()
         print(f"{len(self.ipf_points)} alignment points have been loaded.")
 
     def get_coord_before_tranformation(self, coord_after_transformation: list):
         """
-        Get the coordinates of the selected points before the transformation.
+        By using the inverse transformation matrix, retrieve the coordinate of a selected point on a homographicaly transformed image before transformation.
+        For example, by selecting a point on the transformed and blended EBSD IPF map, the original coordinates on the EBSD IPF map can be retrieved. If the
+        selected point is outside the EBSD map, a warning message will be displayed and the returned coordinates will be [-1, -1].
+
+        Parameters
+        ----------
+        coord_after_transformation : list
+            The coordinate of the point on the transformed image.
+
+        Returns
+        -------
+        original_coord : list
+            The coordinate of the point on the original image. If the selected point is outside the EBSD map, the returned coordinates will be [-1, -1].
         """
         [x, y] = coord_after_transformation
         original_coord = np.dot(
@@ -783,7 +965,18 @@ class ipf_image_correlation:
 
     def get_euler_from_sem_coord(self, sem_coord: list):
         """
-        Get the Euler angles from the SEM coordinates.
+        Get the Euler angles from a point in the homographically transformed EBSD IPF map (blended with sem image). if the selected point is outside the EBSD map,
+        returned Euler angles will be [-1, -1, -1].
+
+        Parameters
+        ----------
+        sem_coord : list
+            The coordinate of the point on the transformed image.
+
+        Returns
+        -------
+        [Eu1, Eu2, Eu3] : list
+            The Euler angles at the selected point. If the selected point is outside the EBSD map, returned Euler angles will be [-1, -1, -1].
         """
         [original_x, original_y] = self.get_coord_before_tranformation(
             [sem_coord[0], sem_coord[1]]
@@ -802,7 +995,18 @@ class ipf_image_correlation:
 
     def get_phase_name(self, sem_coord: list):
         """
-        Get the phase name from the SEM coordinates.
+        Retrieve the phase name from crystal map at a selected point on the homographically transformed EBSD IPF map (blended with sem image). If the selected point
+        is outside the EBSD map, a warning message will be displayed and the returned phase name will be -1.
+
+        Parameters
+        ----------
+        sem_coord : list
+            The coordinate of the point on the transformed image.
+
+        Returns
+        -------
+        phase_name : str
+            The phase name at the selected point. If the selected point is outside the EBSD map, the returned phase name will be -1.
         """
         [original_x, original_y] = self.get_coord_before_tranformation(
             [sem_coord[0], sem_coord[1]]
@@ -820,6 +1024,24 @@ class ipf_image_correlation:
     def interactive_blended_xmap(self, initial_coord: list):
         """
         Display the blended image and allow the user to click on the image to get the Euler angles.
+
+        NOTE: requires pyqt interactive window to run this function.
+
+        Parameters
+        ----------
+        initial_coord : list
+            The initial coordinate of the clicked point.
+
+        Returns
+        -------
+        sem_coords : list
+            The list of all clicked coordinates.
+        ipf_coords : list
+            The list of corresponding coordinates in the EBSD IPF map.
+        euler3 : list
+            The list of Euler angles at the clicked points.
+        phase_name : list
+            The list of phase names at the clicked points.
         """
         self.coord_results = []
 
@@ -896,35 +1118,30 @@ class ipf_image_correlation:
         ref_ECP_path,
         RKP_masterpattern,
         corr_angles,
-        cam_length: float = 4,
         stage_mode: str = "rot-tilt",
     ):
         """
-        Return the required SEM stage rotation and tilt so as to align the clicked direction in angular space with electron beam
-        direction.
+        Return the required SEM stage rotation and tilt so as to align the clicked direction in angular space with electron beam direction.
+        Two RKP pattern will be simulated in this function. The RKP with smaller camera length (wider angular range) displays the overview
+        of nearby Kikuchi bands with labels. A second RKP with slightly larger camera length (smaller angular range) displays the details
+        close to the pattern center. The detailed RKP covers an angular range of approximately +-15 deg to guide the SEM stage tilt and
+        rotation. Double-click on any point within the detailed RKP will trigger a calculation, which will suggest the recommended stage
+        tilt and rotation to align the crystal direction to electron beam direction.
+
+        NOTE: requires pyqt interactive window to run this function.
 
         Parameters
         ----------
-        RKP_masterpattern
-
-        xtal_rotation
-
-        ref_ECP
-
-        corr_angles
-
-        st_rot_angle
-
-        st_tilt_angle
-
-        stage_mode
-
-        Returns
-        -------
-        coords
-            A list of all clicked coordinates. The last two elements are the [x,y] coordinate for the
-            last clicked point.
+        ref_ECP_path : str
+            The path to the reference ECP file.
+        RKP_masterpattern : str
+            The path to the RKP master pattern file. EBSD master pattern pre-calculated in EMsoft software.
+        corr_angles : list
+            The list of correction angles for the RKP simulation.
+        stage_mode : str
+            The stage mode for the stage computation. The default is "rot-tilt". "double-tilt" can also be used for double-tilt stage.
         """
+        # TODO: add visualization of convergence half angle in the angluar space
         # st_rot = Rotation.from_axes_angles([0, 0, 1], -st_rot_angle, degrees=True)
         # st_tilt = Rotation.from_axes_angles([0, 1, 0], -st_tilt_angle, degrees=True)
         sem_coord = self.coord_results[0][-1]
@@ -961,7 +1178,7 @@ class ipf_image_correlation:
             st_tilt_angle=0,
             corr_angles=corr_angles,
             ref_ECP=ref_ECP_path,
-            cam_length=0.6,
+            PCz=0.6,
             RKP_shape=[1024, 1024],
         )
         sim_RKP_lowMag_pattern = np.squeeze(sim_RKP_lowMag.data)
@@ -1001,7 +1218,7 @@ class ipf_image_correlation:
             st_tilt_angle=0,
             corr_angles=corr_angles,
             ref_ECP=ref_ECP_path,
-            cam_length=2,
+            PCz=2,
             RKP_shape=[1024, 1024],
         )
         sim_RKP_hiMag_pattern = np.squeeze(sim_RKP_hiMag.data)

@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
-from src import io
+from openECCI import io
 
 
 def get_relative_stage_pos(reference_image, current_image):
@@ -69,7 +69,7 @@ def _stage_in_range(image_path, stage_x, stage_y):
     check if the stage coordinate [stage_x, stage_y] is inside the image
 
     Returns
-        Boolen
+        Boolean
     """
     [centre_x, centre_y, hfw, vfh] = _get_image_range(image_path)
 
