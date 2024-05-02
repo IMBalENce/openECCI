@@ -76,6 +76,7 @@ def get_sem_metadata(filename: str) -> dict:
                 """
                 FEI/Thermofisher SEM metadata
                 """
+                # raw stage rotation and tilt angles are in radians, convert to degrees for storage
                 st_rot_angle = math.degrees(tif.fei_metadata["Stage"]["StageR"])
                 st_tilt_angle = math.degrees(tif.fei_metadata["Stage"]["StageT"])
 

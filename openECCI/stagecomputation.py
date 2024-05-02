@@ -40,7 +40,7 @@ def get_relative_stage_pos(reference_image, current_image):
         Path and file name.
 
     Returns
-        relative stage tilt and rotation in degrees
+        relative stage tilt and rotation in degrees and relative stage x, y, z in meters
     -------
 
     """

@@ -1118,6 +1118,8 @@ class ipf_image_correlation:
         ref_ECP_path,
         RKP_masterpattern,
         corr_angles,
+        convergence_angle: float = 6,
+        semi_angle: bool = True,
         stage_mode: str = "rot-tilt",
     ):
         """
@@ -1125,10 +1127,16 @@ class ipf_image_correlation:
         Two RKP pattern will be simulated in this function. The RKP with smaller camera length (wider angular range) displays the overview
         of nearby Kikuchi bands with labels. A second RKP with slightly larger camera length (smaller angular range) displays the details
         close to the pattern center. The detailed RKP covers an angular range of approximately +-15 deg to guide the SEM stage tilt and
-        rotation. Double-click on any point within the detailed RKP will trigger a calculation, which will suggest the recommended stage
-        tilt and rotation to align the crystal direction to electron beam direction.
+        rotation. For a given pixel postion within the detailed RKP, the corresponding direction vector that intersect with this pixel in
+        the crystal can be calculated. This orientation is then converted to the required stage rotation (azimuthal angle) and tilt (zenithal
+        angle) to align the crystal direction with the electron beam direction. This interactive fucntion enables double-click on any point
+        within the detailed RKP to obtain the recommended stage rotation and tilt.
 
-        NOTE: requires pyqt interactive window to run this function.
+        Note
+        ----
+        This function requires pyqt interactive window to run this function.
+        The azimuthal angle is the angle between the projection of the direction vector on the RKP detector plane and the :math:`Y_{SEM}` axis.
+        Positive azimuthal angle is in the clockwise direction. The zenithal angle is the angle (0, pi()/2) between the direction vector and math:`Z_{SEM}` axis.
 
         Parameters
         ----------
@@ -1200,9 +1208,9 @@ class ipf_image_correlation:
             axes[0, 1].add_artist(label)
 
         rect = patches.Rectangle(
-            (512 - (307 // 2), 512 - (307 // 2)),
-            307,
-            307,
+            (512 - (341 // 2), 512 - (341 // 2)),
+            341,
+            341,
             linewidth=2,
             edgecolor="royalblue",
             facecolor="none",
@@ -1218,7 +1226,7 @@ class ipf_image_correlation:
             st_tilt_angle=0,
             corr_angles=corr_angles,
             ref_ECP=ref_ECP_path,
-            PCz=2,
+            PCz=1.8,
             RKP_shape=[1024, 1024],
         )
         sim_RKP_hiMag_pattern = np.squeeze(sim_RKP_hiMag.data)
@@ -1228,6 +1236,13 @@ class ipf_image_correlation:
         [Ny, Nx] = sim_RKP_hiMag.detector.shape
         px_size_rkp = sim_RKP_hiMag.detector.px_size
         binning_rkp = sim_RKP_hiMag.detector.binning
+
+        # TODO: add the calculation of the convergence half angle in the angular space
+        conv_pixel_radius, conv_angle_radian = self._convergence_angle_to_rkp_radius(
+            convergence_angle,
+            RKP_detector=sim_RKP_hiMag.detector,
+            semi_angle=semi_angle,
+        )
 
         axes[1, 1].imshow(sim_RKP_hiMag_pattern, cmap="gray")
         # plot the centre marker for rkp prjection centre
@@ -1260,9 +1275,15 @@ class ipf_image_correlation:
                 except:
                     x_pos = 0
                     y_pos = 0
-                axes[1, 1].plot(
-                    x_pos, y_pos, "+", c="yellow", markersize=15, markeredgewidth=3
-                )
+
+                # Plot a circle of radius calculated from electron beam convergnece angle to represent the projected
+                # image of the electron cone in the angular space.
+                theta = np.linspace(0, 2 * np.pi, 100)
+                circle_x = x_pos + conv_pixel_radius * np.cos(theta)
+                circle_y = y_pos + conv_pixel_radius * np.sin(theta)
+                axes[1, 1].plot(circle_x, circle_y, "r", alpha=0.8, linewidth=2)
+
+                # Plot the centre marker for rkp prjection centre
                 axes[1, 1].plot(
                     PCx_rkp * Nx,
                     PCy_rkp * Ny,
@@ -1270,6 +1291,7 @@ class ipf_image_correlation:
                     c="red",
                     markersize=15,
                     markeredgewidth=3,
+                    label="Projection centre",
                 )
                 axes[1, 1].set_title(
                     "Click on RKP to find recommended stage movements", loc="center"
@@ -1281,14 +1303,14 @@ class ipf_image_correlation:
                 [coord_x, coord_y] = [x_pos, y_pos]
                 distance_x = (coord_x - PCx_rkp * Nx) * px_size_rkp * binning_rkp
                 distance_y = (PCy_rkp * Ny - coord_y) * px_size_rkp * binning_rkp
-                # Calculate the physical distance between the ebeam interaction point and the detector in mm (milimeter)
-                distance_l = PCz_rkp * Ny * px_size_rkp * 1e-3 * binning_rkp
+                # Calculate the physical distance between the ebeam interaction point and the detector in um (micrometer)
+                distance_l = PCz_rkp * Ny * px_size_rkp * binning_rkp
 
                 if stage_mode == "rot-tilt":
-                    # if the native SEM rotation tilt stage is used, calcuated the azimuthal and polar angle
+                    # if the native SEM rotation tilt stage is used, calcuated the azimuthal and zenithal angle
                     # of the selected pixel in the detector frame
                     azi_rkp = np.arctan2(distance_x, distance_y)
-                    polar_rkp = math.atan(
+                    zenith_rkp = math.atan(
                         math.sqrt(distance_x**2 + distance_y**2) / distance_l
                     )
                     text = f"""
@@ -1298,13 +1320,15 @@ class ipf_image_correlation:
                     Virtual RKP detector pixel size: 10um
                     Virtual RKP detector camera length: {distance_l:.3f}mm
                     RKP resolution: [1024,1024]
+                    Beam convergence semi angle: {conv_angle_radian*1e3: .3f}mrad
+                    Beam convergence full angle: {math.degrees(conv_angle_radian*2): .3f}\N{DEGREE SIGN}
                     
                     Physical distance to PC on RKP detector:
                     x {distance_x:.2f}um, y {distance_y:.2f}um
                     
                     To orient the selected pixel to the beam direction requires
-                    Stage Rot {round(math.degrees(azi_rkp),2)}\N{DEGREE SIGN}
-                    Stage tilt {round(math.degrees(polar_rkp),2)}\N{DEGREE SIGN}
+                    Stage Rot {math.degrees(azi_rkp): .3f}\N{DEGREE SIGN}
+                    Stage tilt {math.degrees(zenith_rkp): .3f}\N{DEGREE SIGN}
                     """
                 elif stage_mode == "double-tilt":
                     theta_x_rkp = math.atan(distance_x / distance_l)
@@ -1316,13 +1340,15 @@ class ipf_image_correlation:
                     Virtual RKP detector pixel size: 10um
                     Virtual RKP detector camera length: {distance_l:.3f}mm
                     RKP resolution: [1024,1024]
+                    Beam convergence semi angle: {conv_angle_radian*1e3: .3f}mrad
+                    Beam convergence full angle: {math.degrees(conv_angle_radian*2): .3f}\N{DEGREE SIGN}
                     
                     Physical distance to PC on RKP detector:
                     x {distance_x:.2f}um, y {distance_y:.2f}um
                     
                     To orient the selected pixel to the beam direction requires
-                    Tilt around Xs: {round(math.degrees(theta_x_rkp),2)}\N{DEGREE SIGN}
-                    Tilt around Ys: {round(math.degrees(theta_y_rkp),2)}\N{DEGREE SIGN}
+                    Tilt around Xs: {math.degrees(theta_x_rkp): .3f}\N{DEGREE SIGN}
+                    Tilt around Ys: {math.degrees(theta_y_rkp): .3f}\N{DEGREE SIGN}
                     """
 
                 axes[1, 0].axis("off")
@@ -1339,3 +1365,41 @@ class ipf_image_correlation:
         fig.canvas.manager.window.move(0, 0)
 
         # return coords  # coordintes in x, y format
+
+    def _convergence_angle_to_rkp_radius(
+        self, conv_angle: float, RKP_detector, semi_angle: str = True
+    ):
+        """
+        Calculate the electron beam cone coverage in angular space based on the convergence angle. And estimate it projection
+        area in pixel radius on the RKP detector.
+
+        Parameters
+        ----------
+        convergence_angle : float
+            By default, the input variable is expected to be convergence (semi) angle in mrad.
+        RKP_detector : kp.detectors.Detector
+            The RKP detector object.
+        semi : bool
+            If True, the input convergence angle is the semi angle in mrad. Otherwise, it is the full angular range in degrees.
+
+        Returns
+        -------
+        pixel_radius : float
+            The radius of the projected electron beam cone on RKP detector in pixel units.
+        """
+        if semi_angle:
+            conv_angle_rad = conv_angle / 1000
+        else:
+            conv_angle_rad = math.radians(conv_angle / 2)
+
+        [PCx_rkp, PCy_rkp, PCz_rkp] = RKP_detector.pc[0]
+        [Ny, Nx] = RKP_detector.shape
+        px_size_rkp = RKP_detector.px_size  # in micrometer
+        binning_rkp = RKP_detector.binning
+        camera_length = PCz_rkp * Ny * px_size_rkp * binning_rkp
+
+        pixel_radius = (
+            camera_length * math.tan(conv_angle_rad) / px_size_rkp / binning_rkp
+        )
+
+        return pixel_radius, conv_angle_rad
