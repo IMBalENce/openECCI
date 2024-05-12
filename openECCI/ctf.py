@@ -1,20 +1,19 @@
-# -*- coding: utf-8 -*-
-# Copyright 2018-2023 the orix developers
+# Copyright 2018-2024 the openECCI developers
 #
-# This file is part of orix.
+# This file is part of openECCI.
 #
-# orix is free software: you can redistribute it and/or modify
+# openECCI is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# orix is distributed in the hope that it will be useful,
+# openECCI is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with orix.  If not, see <http://www.gnu.org/licenses/>.
+# along with openECCI.  If not, see <http://www.gnu.org/licenses/>.
 
 """Reader of a crystal map from an .ctf file in formats produced by
 Oxford AZtec and EMsoft's EMdpmerge program.

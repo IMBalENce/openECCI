@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with openECCI. If not, see <http://www.gnu.org/licenses/>.
 
+from openECCI.release import version as __version__
+
 __all__ = [
     "util",
     "convergence_angle",

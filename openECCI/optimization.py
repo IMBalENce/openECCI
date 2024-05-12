@@ -83,7 +83,8 @@ class orientation_calibration:
         Pattern (RKP) from its EBSD mapping Euler angles. During the process, the three "active" rotation correction
         angles and the camera length, PCz, are optimized to minimize the deviation.
 
-        params
+        Parameters
+        ----------
         corr_angles
             A list of rotation correction angles in degrees [tiltX_corr_angle, tiltY_corr_angle, tiltZ_corr_angle].
         PCz
@@ -522,7 +523,7 @@ class convergence_angle_measurement:
             The diameter of the diverged probe disk in meter.
         """
         if height_offset is None:
-            height_offset = self.img_metadata["stage_z"] - self.img_metadata["WD"]
+            height_offset = abs(self.img_metadata["stage_z"] - self.img_metadata["WD"])
 
         probe_diameter = (
             np.argmin(gradient_2nd) - np.argmax(gradient_2nd)
@@ -1118,8 +1119,8 @@ class ipf_image_correlation:
         ref_ECP_path,
         RKP_masterpattern,
         corr_angles,
-        convergence_angle: float = 6,
-        semi_angle: bool = True,
+        convergence_angle: float = 0.6,
+        angle_convention: str = "semi-angle",
         stage_mode: str = "rot-tilt",
     ):
         """
@@ -1146,10 +1147,20 @@ class ipf_image_correlation:
             The path to the RKP master pattern file. EBSD master pattern pre-calculated in EMsoft software.
         corr_angles : list
             The list of correction angles for the RKP simulation.
+        convergence_angle : float
+            By default setting of the angle convention, the input variable is expected to be convergence semi angle in mrad.
+            If "full angular range" is defined, the input variable is expected to be the full angular range in degrees.
+        angle_convention : str
+            "semi-angle" or "full angular range". Default is "semi-angle".
         stage_mode : str
             The stage mode for the stage computation. The default is "rot-tilt". "double-tilt" can also be used for double-tilt stage.
         """
-        # TODO: add visualization of convergence half angle in the angluar space
+
+        if angle_convention not in ["semi-angle", "full angular range"]:
+            raise ValueError(
+                "Invalid angle convention. Please use 'semi-angle' or 'full angular range'."
+            )
+
         # st_rot = Rotation.from_axes_angles([0, 0, 1], -st_rot_angle, degrees=True)
         # st_tilt = Rotation.from_axes_angles([0, 1, 0], -st_tilt_angle, degrees=True)
         sem_coord = self.coord_results[0][-1]
@@ -1239,9 +1250,9 @@ class ipf_image_correlation:
 
         # TODO: add the calculation of the convergence half angle in the angular space
         conv_pixel_radius, conv_angle_radian = self._convergence_angle_to_rkp_radius(
-            convergence_angle,
             RKP_detector=sim_RKP_hiMag.detector,
-            semi_angle=semi_angle,
+            convergence_angle=convergence_angle,
+            angle_convention=angle_convention,
         )
 
         axes[1, 1].imshow(sim_RKP_hiMag_pattern, cmap="gray")
@@ -1367,7 +1378,10 @@ class ipf_image_correlation:
         # return coords  # coordintes in x, y format
 
     def _convergence_angle_to_rkp_radius(
-        self, conv_angle: float, RKP_detector, semi_angle: str = True
+        self,
+        RKP_detector,
+        convergence_angle: float,
+        angle_convention: str = "semi-angle",
     ):
         """
         Calculate the electron beam cone coverage in angular space based on the convergence angle. And estimate it projection
@@ -1375,22 +1389,27 @@ class ipf_image_correlation:
 
         Parameters
         ----------
-        convergence_angle : float
-            By default, the input variable is expected to be convergence (semi) angle in mrad.
         RKP_detector : kp.detectors.Detector
             The RKP detector object.
-        semi : bool
-            If True, the input convergence angle is the semi angle in mrad. Otherwise, it is the full angular range in degrees.
+        convergence_angle : float
+            By default setting of the angle convention, the input variable is expected to be convergence semi angle in mrad.
+            If "full angular range" is defined, the input variable is expected to be the full angular range in degrees.
+        angle_convention : str
+            "semi-angle" or "full angular range". Default is "semi-angle".
 
         Returns
         -------
         pixel_radius : float
             The radius of the projected electron beam cone on RKP detector in pixel units.
         """
-        if semi_angle:
-            conv_angle_rad = conv_angle / 1000
+        if angle_convention == "semi-angle":
+            conv_angle_rad = convergence_angle / 1000
+        elif angle_convention == "full angular range":
+            conv_angle_rad = math.radians(convergence_angle / 2)
         else:
-            conv_angle_rad = math.radians(conv_angle / 2)
+            raise ValueError(
+                "Invalid angle convention. Please use 'semi-angle' or 'full angular range'."
+            )
 
         [PCx_rkp, PCy_rkp, PCz_rkp] = RKP_detector.pc[0]
         [Ny, Nx] = RKP_detector.shape
