@@ -35,7 +35,7 @@ pip install -e .
 ## Citing OpenECCI
 
 If you are using openECCI in your scientific research, please help our scientific
-visibility by citing the Zenodo DOI: https://doi.org/.
+visibility by citing the Zenodo DOI: https://doi.org/10.5281/zenodo.11183730.
 
 ## Contributors
 
