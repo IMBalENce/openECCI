@@ -6,10 +6,10 @@
 
 OpenECCI [open-e-ki] is a Python library for Electron Channelling Contrast Imaging (ECCI) analysis of crystal defects in scanning electron microscope (SEM) by guiding precise stage tilt/rotation of the specimen to the preferable orientations. 
 
-| Deployment    | | 
+| Deployment    | Working in progress | 
 | :- | :- |
-| **Activity**      |  |
-| **Citation**      |  |
+| **Activity**      | Working in progress |
+| **Citation**      | [![DOI](https://zenodo.org/badge/799454158.svg)](https://zenodo.org/doi/10.5281/zenodo.11183729) |
 | **License**       | [![GitHub License](https://img.shields.io/github/license/IMBalENce/openECCI)](https://opensource.org/licenses/GPL-3.0) |
 
 ## Documentation
