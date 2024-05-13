@@ -10,8 +10,7 @@ OpenECCI [open-e-ki] is a Python library for Electron Channelling Contrast Imagi
 | :- | :- |
 | **Activity**      |  |
 | **Citation**      |  |
-| **License**       | ![GitHub License](https://img.shields.io/github/license/IMBalENce/openECCI)
-(https://opensource.org/licenses/GPL-3.0) |
+| **License**       | [![GitHub License](https://img.shields.io/github/license/IMBalENce/openECCI)](https://opensource.org/licenses/GPL-3.0) |
 
 ## Documentation
 
@@ -40,4 +39,9 @@ visibility by citing the Zenodo DOI: https://doi.org/.
 
 ## Contributors
 
-
+|Zhou Xu |  Monash Centre for Electron Microscopy (MCEM) |
+| :- | :- |
+| Håkon Wiik Ånes | Norwegian University of Science and Technology <br> Xnovo Technology Aps |
+| Sergey Gorelick | Monash Centre for Electron Microscopy (MCEM) <br>  Ramaciotti Centre for Cryo-Electron Microscopy |
+| Xiya Fang | Monash Centre for Electron Microscopy (MCEM) |
+| Peter Miller | Monash Centre for Electron Microscopy (MCEM) |

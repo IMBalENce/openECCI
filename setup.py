@@ -104,7 +104,7 @@ setup(
         "matplotlib         >= 3.5",
         "numpy              >= 1.21.6",
         "orix               >= 0.11.1",
-        "tqdm               >= 0.5.2",
+        "tqdm               >= 4.58.0",
         "scipy              >= 1.7",
         "kikuchipy          >= 0.8.6",
         "pyqt5-tools >= 5.15",
