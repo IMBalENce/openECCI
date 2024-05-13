@@ -107,9 +107,9 @@ setup(
         "tqdm               >= 4.58.0",
         "scipy              >= 1.7",
         "kikuchipy          >= 0.8.6",
-        "pyqt5-tools >= 5.15",
-        "opencv-python     >= 4.5.3",
-        "tifffile          >= 2023.2.2",
+        "pyqt5-tools        >= 5.15",
+        "opencv-python      >= 4.5.3",
+        "tifffile           >= 2023.2.2",
     ],
     extras_require=extra_feature_requirements,
     # Files to include when distributing package
