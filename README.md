@@ -9,9 +9,11 @@ OpenECCI [open-e-ki] is a Python library for Electron Channelling Contrast Imagi
 
 | Deployment    | ![PyPI - Version](https://img.shields.io/pypi/v/openECCI) | 
 | :- | :- |
-| **Activity**      | Work in progress |
+| **Documentation** | Work in progress |
+| **Activity**      | ![PyPI - Downloads](https://img.shields.io/pypi/dw/openECCI) |
 | **Citation**      | [![DOI](https://zenodo.org/badge/799454158.svg)](https://zenodo.org/doi/10.5281/zenodo.11183729) |
 | **License**       | [![GitHub License](https://img.shields.io/github/license/IMBalENce/openECCI)](https://opensource.org/licenses/GPL-3.0) |
+| **Formatter**     | [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) |
 
 ## Documentation
 
