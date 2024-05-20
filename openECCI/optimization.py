@@ -141,6 +141,10 @@ class orientation_calibration:
         ecp_shape = ecp_metadata["resolution"]
         if ecp_metadata["databar"] == True:
             exp_ECP = plt.imread(self.reference_ECP_path)[: ecp_shape[1], :]
+            if (
+                len(exp_ECP.shape) == 3
+            ):  # if the image is RGB or contains more channels, take the first channel
+                exp_ECP = exp_ECP[:, :, 0]
         else:
             exp_ECP = plt.imread(self.reference_ECP_path)
 
@@ -180,6 +184,10 @@ class orientation_calibration:
         ecp_shape = ecp_metadata["resolution"]
         if ecp_metadata["databar"] == True:
             exp_ECP = plt.imread(self.reference_ECP_path)[: ecp_shape[1], :]
+            if (
+                len(exp_ECP.shape) == 3
+            ):  # if the image is RGB or contains more channels, take the first channel
+                exp_ECP = exp_ECP[:, :, 0]
         else:
             exp_ECP = plt.imread(self.reference_ECP_path)
 
